@@ -36,6 +36,7 @@ I was able to **fill a basic sheet** with FastAPI functionality.
 - learn how to migrate on prod
 - migrate sqlite db
 - N + 1 problem, solved with joinedload
+- N + 1 problem, solved with sectinload
 
 ---
 

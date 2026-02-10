@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from database.database import engine, get_db
 from database.models import Base, User, Payments
@@ -73,5 +73,5 @@ def get_user_by_id(id: int, db: Session = Depends(get_db)):
 
 @app.get("/payments")
 def get_all_payments(db: Session = Depends(get_db)):
-    payments = db.query(Payments).options(joinedload(Payments.user)).all()
+    payments = db.query(Payments).options(selectinload(Payments.user)).all()
     return payments
