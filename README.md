@@ -35,6 +35,9 @@ I was able to **fill a basic sheet** with FastAPI functionality.
 - create a first migration
 - learn how to migrate on prod
 - migrate sqlite db
+- N + 1 problem, solved with joinedload
+
+---
 
 ## Notes
 This repository documents my progress and learning process with FastAPI, guided by AI.
