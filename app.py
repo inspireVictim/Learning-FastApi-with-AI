@@ -16,6 +16,16 @@ class UserCreate(BaseModel):
     age: int
     password: str
 
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    age: int
+    access: bool
+
+    class Config:
+        orm_mode = True
+
 #UTILS
 def is_valid_age(age):
     return 0 <= age <= 120
@@ -50,3 +60,13 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 def get_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
     return users
+
+@app.get("/users/{id}", response_model=UserResponse)
+def get_user_by_id(id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
+
