@@ -40,6 +40,11 @@ I was able to **fill a basic sheet** with FastAPI functionality.
 
 ---
 
+## Day 7
+- Basic knowlidge about JWT
+- Practice JWT
+- Still have a troubles on practic part
+
 ## Notes
 This repository documents my progress and learning process with FastAPI, guided by AI.
 
