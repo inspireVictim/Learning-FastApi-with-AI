@@ -45,6 +45,15 @@ I was able to **fill a basic sheet** with FastAPI functionality.
 - Practice JWT
 - Still have a troubles on practic part
 
+---
+
+## Day 8
+- Solved JWT problems
+- Start learning cache
+- start integrating Redis
+
+---
+
 ## Notes
 This repository documents my progress and learning process with FastAPI, guided by AI.
 
