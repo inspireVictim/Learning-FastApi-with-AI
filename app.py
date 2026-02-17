@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload, selectinload
+from fastapi import FastAPI, HTTPException, Depends, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session, selectinload
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -11,24 +11,21 @@ from database.models import Base, User, Payments
 
 app = FastAPI()
 
-
-#JWT
+# --- JWT Settings ---
 SECRET_KEY = "MY_FIRST_JWT_SECRET_KEY"
-ALGOTITHM = "HS256"
+ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-#DataBase
+# --- Database ---
 Base.metadata.create_all(bind=engine)
 
-#SCHEMAS
+# --- Schemas ---
 class UserCreate(BaseModel):
     name: str
     age: int
-    password: str
-
+    password: str = Field(min_length=8, max_length=72)
 
 class UserResponse(BaseModel):
     id: int
@@ -36,16 +33,9 @@ class UserResponse(BaseModel):
     age: int
     access: bool
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
-#UTILS
-def is_valid_age(age):
-    return 0 <= age <= 120
-
-def is_access(age):
-    return age >= 18
-
+# --- Utils ---
 def hash_password(password: str):
     return pwd_context.hash(password)
 
@@ -58,57 +48,77 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-#ENDPOINTS
+def is_valid_age(age):
+    return 0 <= age <= 120
+
+def is_access(age):
+    return age >= 18
+
+# --- JWT Auth Dependency ---
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+
+    return user
+
+# --- Endpoints ---
 @app.post("/auth/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     if not is_valid_age(user.age):
-        raise HTTPException(status_code=400, detail="invalid age")
+        raise HTTPException(status_code=400, detail="Invalid age")
     
     db_user = User(
-            name=user.name,
-            age=user.age,
-            password=hash_password(user.password),
-            access=is_access(user.age)
-            )
-
+        name=user.name,
+        age=user.age,
+        password=hash_password(user.password),
+        access=is_access(user.age)
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
 
     return {
-            "id": db_user.id,
-            "name": db_user.name,
-            "access": db_user.access
-            }
+        "id": db_user.id,
+        "name": db_user.name,
+        "access": db_user.access
+    }
 
 @app.post("/auth/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.name == form_data.username).first()
-
     if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(status_code = 401, detail = "Unauthorized")
-                    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    
     access_token = create_access_token(data={"sub": str(user.id)})
-
-    return {"access_token": access_token, "token_type":"bearer"}
-
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users")
-def get_users(db: Session = Depends(get_db)):
+def get_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     users = db.query(User).all()
     return users
 
 @app.get("/users/{id}", response_model=UserResponse)
-def get_user_by_id(id: int, db: Session = Depends(get_db)):
+def get_user_by_id(id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == id).first()
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     return user
 
-
 @app.get("/payments")
-def get_all_payments(db: Session = Depends(get_db)):
+def get_all_payments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     payments = db.query(Payments).options(selectinload(Payments.user)).all()
     return payments
