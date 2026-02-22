@@ -54,6 +54,14 @@ I was able to **fill a basic sheet** with FastAPI functionality.
 
 ---
 
+## Day 9
+- Learning Redis
+- start redis server
+- connect redis - server with backend
+- feel goooooooooooooooooooooooooood!
+
+---
+
 ## Notes
 This repository documents my progress and learning process with FastAPI, guided by AI.
 

@@ -5,9 +5,11 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import json
 
 from database.database import engine, get_db
 from database.models import Base, User, Payments
+from database.redis_client import redis_client
 
 app = FastAPI()
 
@@ -35,6 +37,15 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+# --- Redis ---
+@app.on_event("startup")
+async def startup():
+    await redis_client.ping()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await redis_client.close()
+
 # --- Utils ---
 def hash_password(password: str):
     return pwd_context.hash(password)
@@ -55,7 +66,11 @@ def is_access(age):
     return age >= 18
 
 # --- JWT Auth Dependency ---
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+
+    if await redis_client.get(f"blacklist:{token}"):
+        raise HTTPException(status_code=401, detail="Token revoked")
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -107,9 +122,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users")
-def get_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    cached_users = await redis_client.get("users_all")
+
+    if cached_users:
+        return json.loads(cached_users)
+
     users = db.query(User).all()
-    return users
+
+    user_data = [
+            {"id": u.id, "name": u.name, "age": u.age, "access": u.access}
+            for u in users
+        ]
+
+    await redis_client.set(
+            "users_all",
+            json.dumps(user_data),
+            ex=60
+        )
+    return users_data
 
 @app.get("/users/{id}", response_model=UserResponse)
 def get_user_by_id(id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -122,3 +153,8 @@ def get_user_by_id(id: int, current_user: User = Depends(get_current_user), db: 
 def get_all_payments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     payments = db.query(Payments).options(selectinload(Payments.user)).all()
     return payments
+
+@app.post("/auth/logout")
+async def logout(token: str = Depends(oauth2_scheme)):
+    await redis_client.set(f"blacklist:{token}", "true", ex=1800)
+    return {"message": "Logged out"}
